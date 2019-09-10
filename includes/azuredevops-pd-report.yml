@@ -1,0 +1,10 @@
+- hosts: "pd-report"
+  become: true
+  become_method: sudo
+  gather_facts: True
+  vars_files:
+  - ../vars/base.yml
+  tasks:
+    - name: Create working dir
+      path: "/home/{{ deploymentPrefix }}/azagent"
+      state: directory

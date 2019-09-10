@@ -1,0 +1,116 @@
+- hosts: "pd-report"
+  become: true
+  become_method: sudo
+  gather_facts: True
+  vars_files:
+  - ../vars/base.yml
+  pre_tasks:
+  - name: Wait for system to become reachable
+    wait_for_connection:
+      delay: 30 # not required. Number of seconds to wait before starting to poll.
+      sleep: 5 # not required. Number of seconds to sleep between checks.
+      connect_timeout: 10 # not required. Maximum number of seconds to wait for a connection to happen before closing and retrying.
+      timeout: 120 # not required. Maximum number of seconds to wait for.:
+  - name: Gathering facts
+    setup:
+  tasks:
+  - name: "(Install: APT OSs) Add APT NGINX Signing Key"
+    apt_key:
+      id: 573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62
+      keyserver: keyserver.ubuntu.com
+
+  - name: Add nginx repos
+    apt_repository:
+      repo: "deb https://nginx.org/packages/{{ ansible_distribution|lower }}/ {{ ansible_distribution_release }} nginx"
+
+  - name: install packages
+    apt:
+      update_cache: yes
+      force_apt_get: yes
+      name: [nginx, mc, htop, vim, tcpdump, fail2ban]
+
+  - name: Remove extra directories and files
+    file:
+      path: "/etc/nginx/{{ item }}"
+      state: absent
+    with_items:
+      - conf.d/default.conf
+      - fastcgi_params
+      - koi-utf
+      - koi-win
+      - scgi_params
+      - uwsgi_params
+      - win-utf
+
+  - name: Make requires directories and files
+    file:
+       path: "/etc/nginx/{{ item }}"
+       state: directory
+       mode: 0700
+    with_items:
+      - ssl
+
+  - name: Make reports root directory
+    file:
+      path: "{{ item }}"
+      state: directory
+      mode: 0755
+    with_items:
+    - /var/allure/allure-report
+    - /var/allure/html
+
+  - name: make index.html
+    template:
+      src: ../templates/index.html.j2
+      dest: /var/allure/html/index.html
+
+  - name: Make nginx.conf
+    template:
+      src: ../templates/nginx.conf.j2
+      dest: /etc/nginx/nginx.conf
+    notify: restart nginx
+
+  - name: Enable SWAP
+    lineinfile:
+      path: /etc/waagent.conf
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+      backrefs: yes
+    with_items:
+    - { regexp: "^ResourceDisk.Format=n",  line: "ResourceDisk.Format=y" }
+    - { regexp: "^ResourceDisk.EnableSwap=n", line: "ResourceDisk.EnableSwap=y" }
+    - { regexp: "^ResourceDisk.SwapSizeMB=0", line: "ResourceDisk.SwapSizeMB=3072" }
+    notify: "reload walinuxagent"
+
+  - name: create htpasswd
+    htpasswd:
+      path: /etc/nginx/allure.passwd
+      name: "{{ item.username }}"
+      password: "{{ item.password }}"
+    with_items:
+    - { username: admin, password: qwerty1!}
+
+  - name: Set nofile limit for nginx user
+    pam_limits:
+      domain: nginx
+      limit_type: soft
+      limit_item: nofile
+      value: 65535
+    notify: restart nginx
+
+  handlers:
+  - name: restart nginx
+    service: name=nginx state=restarted
+
+  - name: validate nginx configuration
+    command: nginx -t -c /etc/nginx/nginx.conf
+    changed_when: False
+
+  - name: reload nginx
+    service: name=nginx state=reloaded
+
+  - name: restart walinuxagent service
+    service:
+      name: walinuxagent
+      state: restarted
+    listen: "reload walinuxagent"
