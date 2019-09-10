@@ -1,83 +1,20 @@
 - name: Deploy PD Allure Report
   hosts: localhost
-  gather_facts: no
-  vars:
-    deploymentPrefix: "pd-report"
-    outputDirectory: "/etc/ansible/output/{{ deploymentPrefix }}"
-    ansibleFiles: "/etc/ansible/files/"
-    sshpath: "{{ outputDirectory }}/ssh/"
-    azurelocation: "northeurope"
-
-
+  gather_facts: True
+  vars_files:
+    - ./vars/base.yml
   ## Tasks
   tasks:
-
-  # Azure action
-  - name: Deploy az resource group
-    azure_rm_resourcegroup:
-      name: "{{ deploymentPrefix }}"
-      location: "{{ azurelocation }}"
-
-  - name: Deploy Virtual Network
-    azure_rm_virtualnetwork:
-      resource_group: "{{ deploymentPrefix }}"
-      name: "{{ deploymentPrefix }}"
-      address_prefixes_cidr: "10.10.10.0/24"
-
-  - name: Deploy subnet
-    azure_rm_subnet:
-      resource_group: "{{ deploymentPrefix }}"
-      virtual_network_name: "{{ deploymentPrefix }}"
-      name: "main"
-      address_prefix_cidr: "10.10.10.0/25"
-
-  - name: Deploy Public IP
-    azure_rm_publicipaddress:
-      resource_group: "{{ deploymentPrefix }}"
-      name: "{{ deploymentPrefix }}-pip-01"
-      allocation_method: "Static"
-      domain_name: "{{ deploymentPrefix }}-pip-01"
-
-  - name: Deploy network interface
-    azure_rm_networkinterface:
-      resource_group: "{{ deploymentPrefix }}"
-      name: "{{ deploymentPrefix }}-nic-01"
-      virtual_network: "{{ deploymentPrefix }}"
-      subnet_name: "main"
-      ip_configurations:
-      - name: ipconfig
-        public_ip_address_name: "{{ deploymentPrefix }}-pip-01"
-        private_ip_address: "10.10.10.23"
-      open_ports:
-      - 22
-      - 80
-      - 443
-
-  - name: Deploy VM
-    azure_rm_virtualmachine:
-      resource_group: "{{ deploymentPrefix }}"
-      name: "{{ deploymentPrefix }}"
-      admin_username: "{{ deploymentPrefix }}"
-      ssh_public_keys:
-      - path: "/home/{{ deploymentPrefix }}/.ssh/authorized_keys"
-        key_data: "{{ lookup('file', '{{ sshpath }}{{ deploymentPrefix }}.pem.pub') }}"
-      ssh_password_enabled: no
-      vm_size: "Standard_B2s"
-      image:
-        offer: "UbuntuServer"
-        publisher: "Canonical"
-        sku: "18.04-LTS"
-        version: latest
-      os_disk_name: "{{ deploymentPrefix }}-osDisk"
-      managed_disk_type: "Standard_LRS"
-      network_interface_names:
-      - "{{ deploymentPrefix }}-nic-01"
-
-  - add_host:
+  - name: add host
+    add_host:
       name: "{{ deploymentPrefix }}"
       ansible_ssh_host: "{{ deploymentPrefix }}-pip-01.{{ azurelocation }}.cloudapp.azure.com"
       ansible_ssh_user: "{{ deploymentPrefix }}"
       ansible_ssh_port: 22
-      ansible_ssh_private_key_file: "/etc/ansible/pems/{{ deploymentPrefix }}/{{ deploymentPrefix }}.pem"
+      ansible_ssh_private_key_file: "/etc/ansible/pems/{{ deploymentPrefix }}.pem"
 
-- import_playbook: includes/pd-report-nginx.yml
+  - import_tasks: includes/pd-report-azuredeploy.yml
+    when: deployAzure | bool
+
+- import_playbook: includes/pd-report-nginxdeploy.yml
+  when: deployNginx | bool
