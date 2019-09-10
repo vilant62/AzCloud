@@ -4,5 +4,6 @@ ansibleFiles: "/etc/ansible/files/"
 sshpath: "{{ outputDirectory }}/ssh/"
 azurelocation: "northeurope"
 deployAzure: False
-deployNginx: True
-deployAzureDevops: True
+deployNginx: False
+deployAzureDevops: False
+deployAzureDevOps: False
