@@ -1,0 +1,8 @@
+deploymentPrefix: "pd-report"
+outputDirectory: "/etc/ansible/output/{{ deploymentPrefix }}"
+ansibleFiles: "/etc/ansible/files/"
+sshpath: "{{ outputDirectory }}/ssh/"
+azurelocation: "northeurope"
+deployAzure: False
+deployNginx: True
+deployAzureDevops: True
