@@ -4,12 +4,48 @@
   gather_facts: True
   vars_files:
   - ../vars/base.yml
-  pre_tasks:
-  - name: Wait for system to become reachable
-    wait_for_connection:
-      delay: 30 # not required. Number of seconds to wait before starting to poll.
-      sleep: 5 # not required. Number of seconds to sleep between checks.
-      connect_timeout: 10 # not required. Maximum number of seconds to wait for a connection to happen before closing and retrying.
-      timeout: 120 # not required. Maximum number of seconds to wait for.:
-  - name: Gathering facts
-    setup:
+  - ../vars/pd-report-vault.yml
+  tasks:
+  - name: Install packages
+    apt:
+      update_cache: yes
+      force_apt_get: yes
+      name: [ 'curl', 'dnsutils', 'net-tools', 'npm', '' ]
+
+  - name: Add azagent service user
+    user:
+      user: azagent
+      password: '*'
+      home: /var/azagent/
+      create_home: yes
+      shell: /usr/sbin/nologin
+      update_password: on_create
+
+  - name: Download agent
+    get_url:
+      url: "https://vstsagentpackage.azureedge.net/agent/2.155.1/vsts-agent-linux-x64-2.155.1.tar.gz"
+      dest: "/tmp/vstsagent.tar.gz"
+
+  - name: Extract archive
+    unarchive:
+      remote_src: yes
+      src: "/tmp/vstsagent.tar.gz"
+      dest: "/var/azagent/"
+      owner: azagent
+      group: azagent
+
+  - name: Install dependencies
+    shell:
+      ./bin/installdependencies.sh
+    args:
+      chdir: /var/azagent
+
+  - name: Configure agent service
+    become_user: azagent
+    shell:
+      /var/azagent/config.sh --unattended --deploymentgroup --deploymentgroupname "pd-report" \
+                  --acceptTeeEula --agent $HOSTNAME --url https://dev.azure.com/bright-box-azure/ \
+                  --auth PAT --token "{{ azDevOpstoken }}" \
+                  --work _work --projectname 'RCS' --runasservice
+    args:
+      chdir: /var/azagent/
